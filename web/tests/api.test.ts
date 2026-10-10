@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {handle} from '../src/lib/api';
+import {analyze,DemoInput,outreach,interview} from '../src/lib/intelligence';
+const post=(body:unknown)=>new Request('https://demo.test/api/demo/analyze',{method:'POST',body:JSON.stringify(body)});
+test('health exposes locked private mode',async()=>{const r=await handle(new Request('https://demo.test/api/health'),'health');assert.equal(r.status,200);assert.equal((await r.json()).uploadsEnabled,false);});
+test('all specified private routes reject access',async()=>{for(const path of ['profile','profile/upload','career/analyze','opportunities','outreach/generate','interview/generate','applications','executive-search']){for(const method of ['GET','POST']){const r=await handle(new Request('https://demo.test/api/'+path,{method}),path);assert.equal(r.status,403);}}});
+test('invalid and oversized demo requests rejected',async()=>{assert.equal((await handle(post({skills:['invented certification']}),'demo/analyze')).status,400);assert.equal((await handle(post({name:'private data'}),'demo/analyze')).status,400);assert.equal((await handle(new Request('https://demo.test',{method:'POST',body:'x'.repeat(2049)}),'demo/analyze')).status,413);assert.equal((await handle(new Request('https://demo.test'),'demo/analyze')).status,405);});
+test('profile corrections change skill evidence',()=>{const result=analyze(DemoInput.parse({skills:['SQL']}));assert.deepEqual(result[0].evidence,['SQL']);assert.ok(result[0].gaps.includes('Python'));assert.equal(result.length,3);});
+test('structured outreach and interview generators',async()=>{for(const path of ['demo/outreach','demo/interview']){const r=await handle(post({profile:{skills:['SQL']},roleIndex:1}),path);assert.equal(r.status,200);}assert.equal(Object.keys(outreach(DemoInput.parse({}),0)).length,5);assert.equal(interview(0).plan.length,7);});
+test('no vacancy or company claims and no caching',async()=>{const r=await handle(post({}),'demo/analyze');assert.equal(r.headers.get('Cache-Control'),'no-store');const d=await r.json();assert.match(d.recommendations[0].uncertainty,/synthetic/);assert.equal(d.recommendations[0].company,undefined);});
