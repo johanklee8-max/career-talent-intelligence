@@ -26,6 +26,7 @@ test('skill extraction records evidence, avoids substring false positives and ad
  const before=matchCareer(['SQL','Excel','Python'],'data');assert.equal(before[0].title,'Data analyst');
  const after=matchCareer(['Sales','Communication'],'sales');assert.equal(after[0].title,'Sales / business development specialist');
  assert.equal(matchCareer([],'software').length,0);
+ assert.equal(matchCareer(['Communication'],'sales').length,0);
  assert.ok(extractSignals('Python experience')[0].excerpt.includes('experience'));
 });
 test('public listings are source restricted and matching filters without sending CV',async()=>{
@@ -37,6 +38,9 @@ test('public listings are source restricted and matching filters without sending
  assert.equal(rankJobs(body.jobs,['SQL'],null,'Berlin').length,1);
  assert.equal(rankJobs(body.jobs,['SQL'],null,'Rome').length,0);
  assert.equal(rankJobs(body.jobs,['Teaching'],null,'').length,0);
+ const dataTarget=matchCareer(['SQL','Excel','Python'],'')[0];
+ const unrelated={title:'Sales manager',company:'Example',location:'Berlin',remote:false,url:'https://www.arbeitnow.com/jobs/unrelated',tags:['Communication'],postedAt:'2026-10-10'};
+ assert.equal(rankJobs([...body.jobs,unrelated],['SQL','Communication'],dataTarget,'').length,1);
 });
 test('job feed failure is explicit and never substitutes invented jobs',async()=>{
  const failing=(async()=>{throw Error('upstream down');}) as typeof fetch;
