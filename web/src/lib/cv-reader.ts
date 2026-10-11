@@ -20,7 +20,7 @@ export function docxDocument(data:Uint8Array){
  if(/<!DOCTYPE|<!ENTITY/i.test(xml))throw Error('Unsafe XML declarations are not accepted.');
  return xml;
 }
-export async function readCV(file:File){
+async function extractCV(file:File){
  if(file.size>MAX_CV_BYTES)throw Error('Maximum CV size is 3 MiB.');
  const data=new Uint8Array(await file.arrayBuffer()); const type=validateFile(file.name,data); let text='';
  if(type==='docx'){
@@ -47,3 +47,11 @@ export async function readCV(file:File){
  if(text.trim().length<30)throw Error('No usable text found. Scanned PDFs need OCR; export a text-based PDF or DOCX.');
  return text.trim();
 }
+
+// Bound the complete operation, including file access, dynamic import and extraction.
+export async function withDeadline<T>(operation:Promise<T>,milliseconds=30000):Promise<T>{
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{return await Promise.race([operation,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('CV reading timed out. Retry, or paste text copied from your CV.')),milliseconds);})]);}
+ finally{if(timer)clearTimeout(timer);}
+}
+export function readCV(file:File){return withDeadline(extractCV(file));}

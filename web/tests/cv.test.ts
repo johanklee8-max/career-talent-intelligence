@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,strToU8} from 'fflate';
-import {validateFile,docxDocument,MAX_CV_BYTES} from '../src/lib/cv-reader';
+import {validateFile,docxDocument,MAX_CV_BYTES,withDeadline} from '../src/lib/cv-reader';
 import {extractSignals,matchCareer,rankJobs} from '../src/lib/cv-matching';
 import {sampleCV} from '../src/lib/sample-cv';
 import {publicJobs} from '../src/lib/public-jobs';
@@ -45,4 +45,10 @@ test('public listings are source restricted and matching filters without sending
 test('job feed failure is explicit and never substitutes invented jobs',async()=>{
  const failing=(async()=>{throw Error('upstream down');}) as typeof fetch;
  const r=await publicJobs(failing);assert.equal(r.status,502);assert.equal((await r.json()).error.code,'JOB_SOURCE_UNAVAILABLE');
+});
+
+test('a stalled file read reports an actionable timeout; successful reads pass through',async()=>{
+ await assert.rejects(withDeadline(new Promise<string>(()=>{}),10),/timed out/);
+ assert.equal(await withDeadline(Promise.resolve('CV text'),100),'CV text');
+ await assert.rejects(withDeadline(Promise.reject(Error('broken file')),100),/broken file/);
 });
