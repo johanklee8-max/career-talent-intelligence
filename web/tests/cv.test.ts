@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 import {zipSync,strToU8} from 'fflate';
 import {validateFile,docxDocument,MAX_CV_BYTES,withDeadline} from '../src/lib/cv-reader';
 import {extractSignals,matchCareer,rankJobs} from '../src/lib/cv-matching';
@@ -51,4 +52,23 @@ test('a stalled file read reports an actionable timeout; successful reads pass t
  await assert.rejects(withDeadline(new Promise<string>(()=>{}),10),/timed out/);
  assert.equal(await withDeadline(Promise.resolve('CV text'),100),'CV text');
  await assert.rejects(withDeadline(Promise.reject(Error('broken file')),100),/broken file/);
+});
+test('PDF extraction works when the browser lacks Uint8Array.toHex',async()=>{
+ const data=Array.from(new Uint8Array(await sampleCV('pdf').arrayBuffer()));
+ const script=`
+  delete Uint8Array.prototype.toHex;
+  // Node has no DOMMatrix; text extraction never invokes this canvas-only stub.
+  globalThis.DOMMatrix=class DOMMatrix {};
+  const pdf=await import('pdfjs-dist/legacy/build/pdf.mjs');
+  pdf.GlobalWorkerOptions.workerSrc=import.meta.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+  const task=pdf.getDocument({data:Uint8Array.from(${JSON.stringify(data)}),useSystemFonts:true,disableFontFace:true});
+  try{
+   const doc=await task.promise;
+   const page=await doc.getPage(1);
+   const text=(await page.getTextContent()).items.map(item=>item.str||'').join(' ');
+   if(!text.includes('Python and SQL'))throw Error('CV text not extracted');
+  }finally{await task.destroy();}
+ `;
+ const result=spawnSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8',timeout:15000});
+ assert.equal(result.status,0,result.stderr||String(result.error));
 });

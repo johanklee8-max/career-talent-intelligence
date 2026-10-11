@@ -28,8 +28,9 @@ async function extractCV(file:File){
   if(doc.querySelector('parsererror'))throw Error('The DOCX document contains invalid XML.');
   text=Array.from(doc.getElementsByTagNameNS('*','p')).map(p=>Array.from(p.getElementsByTagNameNS('*','t')).map(t=>t.textContent??'').join('')).join('\n');
  }else{
-  const pdf=await import('pdfjs-dist');
-  pdf.GlobalWorkerOptions.workerSrc=new URL('pdfjs-dist/build/pdf.worker.min.mjs',import.meta.url).toString();
+  // Both contexts need PDF.js's compatibility polyfills (including Uint8Array.toHex).
+  const pdf=await import('pdfjs-dist/legacy/build/pdf.mjs');
+  pdf.GlobalWorkerOptions.workerSrc=new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs',import.meta.url).toString();
   const loading=pdf.getDocument({data,useSystemFonts:true,disableFontFace:true});
   const timeout=setTimeout(()=>{void loading.destroy();},20000);
   try{
