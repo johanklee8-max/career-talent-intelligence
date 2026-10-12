@@ -3,8 +3,8 @@ import type {PublicJob} from './cv-matching';
 const s=z.string().max(1000),html=z.string().max(300000).optional().default('');
 const schemas={
  Arbeitnow:z.object({title:s,company_name:s,location:s,remote:z.boolean(),url:z.string().url(),tags:z.array(s).max(100),created_at:z.number().finite().min(0).max(4102444800),description:html}),
- Remotive:z.object({title:s,company_name:s,candidate_required_location:s,url:z.string().url(),publication_date:s,category:s,tags:z.array(s).max(100).optional().default([]),description:html}),
- Jobicy:z.object({jobTitle:s,companyName:s,jobGeo:s,url:z.string().url(),pubDate:s,jobIndustry:z.array(s).max(100).optional().default([]),jobDescription:html}),
+ Remotive:z.object({title:s,company_name:s,candidate_required_location:s,url:z.string().url(),publication_date:s,category:s,salary:z.string().max(1000).optional(),tags:z.array(s).max(100).optional().default([]),description:html}),
+ Jobicy:z.object({jobTitle:s,companyName:s,jobGeo:s,url:z.string().url(),pubDate:s,jobIndustry:z.array(s).max(100).optional().default([]),jobDescription:html,salaryMin:z.number().finite().nonnegative().nullable().optional(),salaryMax:z.number().finite().nonnegative().nullable().optional(),salaryCurrency:z.string().max(10).nullable().optional(),salaryPeriod:z.string().max(30).nullable().optional()}),
 };
 export function plainDescription(value:string){return value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]*>/g,' ').replace(/&nbsp;|&#160;/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim().slice(0,6000);}
 export const jobSources=[
@@ -27,6 +27,8 @@ export async function publicJobs(fetcher:typeof fetch=fetch){
     if('created_at' in j)job={title:j.title,company:j.company_name,location:j.location,remote:j.remote,url:j.url,tags:j.tags,postedAt:new Date(j.created_at*1000).toISOString(),description:plainDescription(j.description),source:source.name};
     else if('publication_date' in j)job={title:j.title,company:j.company_name,location:j.candidate_required_location,remote:true,url:j.url,tags:[j.category,...j.tags],postedAt:j.publication_date,description:plainDescription(j.description),source:source.name};
     else job={title:j.jobTitle,company:j.companyName,location:j.jobGeo,remote:true,url:j.url,tags:j.jobIndustry,postedAt:j.pubDate,description:plainDescription(j.jobDescription),source:source.name};
+    if('salary' in j)job.salaryText=j.salary;
+    if('salaryMin' in j||'salaryMax' in j){job.salaryMin=j.salaryMin??undefined;job.salaryMax=j.salaryMax??undefined;job.salaryCurrency=j.salaryCurrency??undefined;job.salaryPeriod=j.salaryPeriod??undefined;}
     return Number.isFinite(Date.parse(job.postedAt))?[job]:[];
    });return {name:source.name,ok:true,jobs};
   }catch{return {name:source.name,ok:false,jobs:[] as PublicJob[]};}
