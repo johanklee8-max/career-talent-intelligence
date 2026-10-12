@@ -50,11 +50,11 @@ export function matchCareer(skills:string[],ambitions:string){
  }).filter(r=>r.evidence.some(s=>!['Communication','Leadership'].includes(s))).sort((a,b)=>b.rank-a.rank).slice(0,6);
 }
 export type CareerMatch=ReturnType<typeof matchCareer>[number];
-export type PublicJob={title:string;company:string;location:string;remote:boolean;url:string;tags:string[];postedAt:string};
-export function rankJobs(jobs:PublicJob[],skills:string[],target:CareerMatch|null,location:string){
- return jobs.filter(j=>!location||j.location.toLowerCase().includes(location.toLowerCase())).map(job=>{
-  const text=[job.title,...job.tags].join(' '); const relevantSkills=target?target.evidence:skills; const evidence=extractSignals(text).filter(s=>relevantSkills.includes(s.skill)).map(s=>s.skill);
-  const words=(target?.query??'').split(' ').filter(w=>w.length>3); const roleOverlap=words.filter(w=>text.toLowerCase().includes(w));
-  return {...job,evidence,roleOverlap,rank:evidence.length+roleOverlap.length,roleComplete:words.length>0&&roleOverlap.length===words.length};
- }).filter(j=>target?j.evidence.length>0||j.roleComplete:j.rank>0).sort((a,b)=>b.rank-a.rank).slice(0,12);
+export type PublicJob={title:string;company:string;location:string;remote:boolean;url:string;tags:string[];postedAt:string;description?:string;source?:string};
+export function rankJobs(jobs:PublicJob[],skills:string[],target:CareerMatch|null,location:string,query='',includeRemote=false){
+ return jobs.filter(j=>!location.trim()||j.location.toLowerCase().includes(location.trim().toLowerCase())||(includeRemote&&j.remote)).map(job=>{
+  const text=[job.title,...job.tags,job.description??''].join(' '); const relevantSkills=target?target.evidence:skills; const evidence=extractSignals(text).filter(s=>relevantSkills.includes(s.skill)).map(s=>s.skill);
+  const words=(query.trim()||target?.query||'').toLowerCase().split(/\s+/).filter(w=>w.length>1); const roleOverlap=words.filter(w=>text.toLowerCase().includes(w));
+  return {...job,evidence,roleOverlap,rank:evidence.length+roleOverlap.length*2,roleComplete:words.length>0&&roleOverlap.length===words.length};
+ }).filter(j=>query.trim()?j.roleComplete:target?j.evidence.length>0||j.roleComplete:j.rank>0).sort((a,b)=>b.rank-a.rank).slice(0,30);
 }

@@ -5,7 +5,7 @@ import {zipSync,strToU8} from 'fflate';
 import {validateFile,docxDocument,MAX_CV_BYTES,withDeadline} from '../src/lib/cv-reader';
 import {extractSignals,matchCareer,rankJobs} from '../src/lib/cv-matching';
 import {sampleCV} from '../src/lib/sample-cv';
-import {publicJobs} from '../src/lib/public-jobs';
+import {publicJobs,jobSources,plainDescription} from '../src/lib/public-jobs';
 test('PDF and DOCX samples pass content validation; invalid and oversized documents fail',async()=>{
  for(const type of ['pdf','docx'] as const){const file=sampleCV(type);assert.equal(validateFile(file.name,new Uint8Array(await file.arrayBuffer())),type);}
  assert.throws(()=>validateFile('cv.pdf',strToU8('fake PDF')),/contents/);
@@ -32,10 +32,10 @@ test('skill extraction records evidence, avoids substring false positives and ad
 });
 test('public listings are source restricted and matching filters without sending CV',async()=>{
  const item={title:'Data analyst',company_name:'Example',location:'Berlin',remote:true,url:'https://www.arbeitnow.com/jobs/example',tags:['SQL'],created_at:1700000000};
- let received='';
- const fetcher=(async(url:unknown)=>{received=String(url);return Response.json({data:[item,{...item,url:'javascript:alert(1)'},{title:'bad'}]});}) as typeof fetch;
+ const received:string[]=[];
+ const fetcher=(async(url:unknown)=>{received.push(String(url));return Response.json({data:[item,{...item,url:'javascript:alert(1)'},{title:'bad'}]});}) as typeof fetch;
  const response=await publicJobs(fetcher),body=await response.json();assert.equal(response.status,200);assert.equal(body.jobs.length,1);
- assert.equal(received,'https://www.arbeitnow.com/api/job-board-api');
+ assert.deepEqual(received,jobSources.map(s=>s.url));
  assert.equal(rankJobs(body.jobs,['SQL'],null,'Berlin').length,1);
  assert.equal(rankJobs(body.jobs,['SQL'],null,'Rome').length,0);
  assert.equal(rankJobs(body.jobs,['Teaching'],null,'').length,0);
@@ -71,4 +71,18 @@ test('PDF extraction works when the browser lacks Uint8Array.toHex',async()=>{
  `;
  const result=spawnSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8',timeout:15000});
  assert.equal(result.status,0,result.stderr||String(result.error));
+});
+
+test('multiple sources survive partial failure, strip HTML and support description/remote matching',async()=>{
+ const fetcher=(async(url:unknown)=>{
+  if(String(url).includes('arbeitnow'))throw Error('source down');
+  if(String(url).includes('remotive'))return Response.json({jobs:[{title:'Customer success',company_name:'Example',candidate_required_location:'Worldwide',url:'https://remotive.com/remote-jobs/test',publication_date:'2026-10-10',category:'Support',description:'<p>Uses SQL for customer analysis.</p><script>bad()</script>'}]});
+  return Response.json({jobs:[{jobTitle:'Research assistant',companyName:'Example',jobGeo:'Europe',url:'https://jobicy.com/jobs/test',pubDate:'2026-10-10',jobDescription:'Research and Excel',jobIndustry:['Research']}]});
+ }) as typeof fetch;
+ const r=await publicJobs(fetcher),body=await r.json();assert.equal(r.status,200);assert.equal(body.jobs.length,2);
+ assert.equal(body.sources.find((s:{name:string})=>s.name==='Arbeitnow').status,'unavailable');
+ assert.equal(rankJobs(body.jobs,['SQL'],null,'Berlin').length,0);
+ assert.equal(rankJobs(body.jobs,['SQL'],null,'Berlin','SQL',true).length,1);
+ assert.equal(rankJobs(body.jobs,[],null,'','research').length,1);
+ assert.equal(plainDescription('<p>SQL &amp; Excel</p><script>bad()</script>'),'SQL & Excel');
 });
